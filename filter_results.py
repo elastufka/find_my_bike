@@ -6,6 +6,7 @@ from scrapy.crawler import CrawlerProcess
 from tutti_spider import TuttiSpider
 from tutti_spider_details import TuttiSpiderDetails
 import argparse
+import os
 import io
 from google.cloud import vision
 from google.oauth2 import service_account
@@ -62,7 +63,7 @@ def annotate(image_url):
     """Returns web annotations given the path to an image."""
     # [START vision_web_detection_tutorial_annotate]
 
-    credentials = service_account.Credentials.from_service_account_file('/Users/wheatley/Documents/Python/find_my_bike/find-my-bike-343214-78ff489254b9.json')
+    credentials = service_account.Credentials.from_service_account_file(os.environ['BIKE_CREDENTIALS'])
 
     client = vision.ImageAnnotatorClient(credentials=credentials)
 
@@ -89,7 +90,7 @@ def web_detect_velo(image_urls):
         if annotations.web_entities:
             #print('\n{} Web entities found: '.format(len(annotations.web_entities)))
             for entity in annotations.web_entities[:3]: #if bike in top 3, keep
-                if entity.description =='Bike' and entity.score >0.8:
+                if entity.description =='Bike' or entity.description == 'Road Bike' and entity.score >0.6:
                     bike_urls.append(im)
     return bike_urls
                     
@@ -134,6 +135,8 @@ if __name__ == "__main__":
         help="do the scrape for ads")
     parser.add_argument('-s2', '--scrape2', metavar="scrape2", type=bool, default=False,
     help="do the scrape for details")
+    parser.add_argument('-cv', '--cv', metavar="cloud_vision", type=bool, default=False,
+    help="use cloud vision API to see if the image is a bike")
     args = parser.parse_args()
 
     if args.scrape1:
@@ -154,6 +157,9 @@ if __name__ == "__main__":
     filtered_df=filter_details(tutti_details,exclude_types,exclude_brands=exclude_brands,exclude_colors=exclude_colors,exclude_other=exclude_other)
     
     mdf=merge_results(filtered_df,original_df)
-    bike_urls=web_detect_velo(mdf.first_image.values.tolist())
-    bike_df = mdf.first_image.isin(bike_urls)
-    gen_md_table(bike_df)
+    if args.cv:
+        bike_urls=web_detect_velo(mdf.first_image.values.tolist())
+        bike_df = mdf[mdf.first_image.isin(bike_urls)]
+        gen_md_table(bike_df)
+    else:
+        gen_md_table(mdf)
