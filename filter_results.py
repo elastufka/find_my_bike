@@ -13,10 +13,10 @@ from google.oauth2 import service_account
 
 #from twisted.internet import reactor
 
-exclude_types=['kinder','kind','mädchen','kindervelo','kinderfahrrad','damenvelo','damen','citybike','city','mountain','mountainbike','mtb','fatbike','militär','bmx','e-bike','ebike','cruiser','fixie','einrad']
-exclude_brands=['cube','giant','cannondale','totem','scott','wheeler','canyon','california','merida','bianchi','clio','bmc','gary fisher','crosswave','schwinn','puky']
+exclude_types=['kinder','kind','mädchen','kindervelo','kinderfahrrad','damenvelo','citybike','mountain','mountainbike','mtb','fatbike','militär','bmx','e-bike','ebike','cruiser','fixie','einrad']
+exclude_brands=['cube','giant','cannondale','totem','scott','wheeler','canyon','california','merida','bianchi','clio','bmc','gary fisher','crosswave','schwinn','puky','stoke']
 exclude_colors=['weiss','schwarz','rot','gelb','grau'] #should use nltk eventually to make langauge-independent
-exclude_other=['helm','veloanhänger','anhänger','14 zoll','16 zoll','18 zoll','20 zoll','26 zoll','28 zoll','licht','sattel','neu','laufrad','hometrainer','indoor','pedale','fahrradträger','veloträger','velotasche','taschen','suche','velonummer','velosschloss','stützräder','ketten']
+exclude_other=['helm','veloanhänger','anhänger','20 zoll','26 zoll','28 zoll','neu','laufrad','hometrainer','indoor','suche','velonummer','velosschloss','stützräder']
 
 def filter_results(df,exclude_types,exclude_brands=exclude_brands,exclude_colors=exclude_colors,exclude_other=exclude_other):
     '''basic filtering'''
@@ -32,7 +32,7 @@ def filter_results(df,exclude_types,exclude_brands=exclude_brands,exclude_colors
     badrows=[]
     for i,row in df.iterrows():
         for e in exclude:
-            if e in row.title.lower() or e in e in row.short_text.lower().replace('\n',' '):
+            if e in row.title.lower() or e in e in row.description.lower().replace('\n',' '):
                 badrows.append(i)
                 break
                 
@@ -84,42 +84,55 @@ def annotate(image_url):
 def web_detect_velo(image_urls):
     """Prints detected features in the provided web annotations."""
     # [START vision_web_detection_tutorial_print_annotations]
-    bike_urls=[]
+    urls,entities,scores=[],[],[]
     for im in image_urls:
         annotations=annotate(im)
         if annotations.web_entities:
             #print('\n{} Web entities found: '.format(len(annotations.web_entities)))
             for entity in annotations.web_entities[:3]: #if bike in top 3, keep
-                if entity.description =='Bike' or entity.description == 'Road Bike' and entity.score >0.6:
-                    bike_urls.append(im)
-    return bike_urls
+                if (entity.description =='Bike' or entity.description == 'Road Bike') and entity.score >0.6:
+                    urls.append(im)
+                    entities.append(entity.description)
+                    scores.append(entity.score)
+    bike_dict={"im_url":urls,"entity":entities,"score":scores}
+    return bike_dict
                     
-def merge_results(filtered_df,original_df):
-    mdf=filtered_df.merge(original_df,left_on='key',right_on='url',how='inner')
-    mdf.rename(columns={'url_x':'full_url'},inplace=True)
-    mdf.drop(columns='url_y',inplace=True)
-    mdf=mdf.drop_duplicates(subset='full_url')
-    return mdf
+#def merge_results(filtered_df,original_df):
+#    mdf=filtered_df.merge(original_df,left_on='key',right_on='url',how='inner')
+#    mdf.rename(columns={'url_x':'full_url'},inplace=True)
+#    mdf.drop(columns='url_y',inplace=True)
+#    mdf=mdf.drop_duplicates(subset='full_url')
+#    return mdf
     
 #generate md table
 
 def gen_md_table(df,ncols=5,write=True):
+    spcial_char_map = {ord('ä'):'ae', ord('ü'):'ue', ord('ö'):'oe', ord('ß'):'ss'}
     im_urls=df.first_image.values.tolist()
-    ad_urls=df.full_url.values.tolist()
+    ad_urls=df.url.values.tolist()
+    ad_dates=df.date_posted.values.tolist()
+    ad_titles=df.title.values.tolist()
+    ad_postz=df.postzahl.values.tolist()
     headerrow=['|','|']
     for col in range(ncols):
         headerrow[0]+='     |'
         headerrow[1]+=' --- |'
     headerrow[0]+='\n'
     headerrow[1]+='\n'
-    nrows=len(im_urls)//ncols
+    nrows=len(im_urls)//ncols +1
     table_data=[]
     for i,row in enumerate(range(nrows)):
         rowdata='|'
         for j,col in enumerate(range(ncols)):
-            im_url=im_urls[(i*ncols)+j]
-            ad_url=ad_urls[(i*ncols)+j]
-            rowdata+=f"<img src='{im_url}' height='100px' width='150px'>[ad]({ad_url}) |"
+            try:
+                im_url=im_urls[(i*ncols)+j]
+                ad_url=ad_urls[(i*ncols)+j]
+                ad_date=ad_dates[(i*ncols)+j]
+                ad_post=ad_postz[(i*ncols)+j]
+                ad_title=ad_titles[(i*ncols)+j].translate(spcial_char_map)
+                rowdata+=f"<img src='{im_url}' alt='{ad_title}' height='100px' width='150px'>[{ad_date} {ad_post}]({ad_url}) |"
+            except IndexError:
+                rowdata+=" |"
         table_data.append(f"{rowdata}\n")
     if not write:
         return headerrow,table_data
@@ -131,35 +144,41 @@ def gen_md_table(df,ncols=5,write=True):
   
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="is my stolen bike being resold?")
-    parser.add_argument('-s1', '--scrape1', metavar="scrape1", type=bool, default=False,
+    parser.add_argument('-scrape', '--scrape', metavar="scrape", type=bool, default=False,
         help="do the scrape for ads")
-    parser.add_argument('-s2', '--scrape2', metavar="scrape2", type=bool, default=False,
-    help="do the scrape for details")
     parser.add_argument('-cv', '--cv', metavar="cloud_vision", type=bool, default=False,
     help="use cloud vision API to see if the image is a bike")
+    parser.add_argument('-w', '--w', metavar="write", type=bool, default=False,
+    help="write images to markdown")
     args = parser.parse_args()
 
-    if args.scrape1:
-        process=CrawlerProcess()
-        process.crawl(TuttiSpider)
+    if args.scrape:
+        process=CrawlerProcess({'FEED_FORMAT': 'json','FEED_URI': 'tutti_results_temp.json'})
+        process.crawl(TuttiSpider,start_date=dt.now())
         process.start()
+        tutti_df=pd.read_json('tutti_results.jl')
+        new_df=pd.read_json('tutti_results_temp.json')
+        tutti_df.merge(new_df,on='url')
+        tutti_df.reset_index(inplace=True).drop_duplicates(inplace=True)
+        tutti_df.to_json('tutti_results.jl')
         
-    tutti_df=pd.read_json('tutti_results.jl',lines=True)
+    tutti_df=pd.read_json('tutti_results.jl')
     original_df=filter_results(tutti_df,exclude_types,exclude_brands=exclude_brands,exclude_colors=exclude_colors,exclude_other=exclude_other).drop_duplicates(subset='url')
     original_df.to_json('tutti_filtered.json')
+    #filtered_df=filter_details(tutti_details,exclude_types,exclude_brands=exclude_brands,exclude_colors=exclude_colors,exclude_other=exclude_other)
     
-    if args.scrape2:
-        process=CrawlerProcess()
-        process.crawl(TuttiSpiderDetails)
-        process.start()
-        
-    tutti_details=pd.read_json('tutti_detail.jl',lines=True)
-    filtered_df=filter_details(tutti_details,exclude_types,exclude_brands=exclude_brands,exclude_colors=exclude_colors,exclude_other=exclude_other)
+    mdf=original_df#merge_results(filtered_df,original_df)
     
-    mdf=merge_results(filtered_df,original_df)
     if args.cv:
-        bike_urls=web_detect_velo(mdf.first_image.values.tolist())
-        bike_df = mdf[mdf.first_image.isin(bike_urls)]
+        bdf=pd.read_json('tutti_scored.json')
+        new_ims=[i for i in mdf.first_image.values.tolist() if i not in bdf.first_image.values.tolist()]
+        print(f"checking {len(new_ims)} images to see if they contain bicycles...")
+        bike_dict=pd.DataFrame(web_detect_velo(new_ims))) #only run on ones that don't have score yet...
+        bike_df = mdf.merge(bike_dict,left_on='first_image',right_on='im_url').sort_values(by='date_posted')
+        bike_df.drop_duplicates(subset='url',inplace=True)
+        bike_df.to_json('tutti_scored.json')
+        bike_df.dropna(subset=['entity','score'],inplace=True)
+        print(f"{len(bike_df)}/{len(mdf)} images contain bicycles")
         gen_md_table(bike_df)
-    else:
+    elif args.w:
         gen_md_table(mdf)
