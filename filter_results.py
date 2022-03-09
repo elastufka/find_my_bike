@@ -4,7 +4,6 @@ import pandas as pd
 import scrapy
 from scrapy.crawler import CrawlerProcess
 from tutti_spider import TuttiSpider
-from tutti_spider_details import TuttiSpiderDetails
 import argparse
 import os
 import io
@@ -127,7 +126,7 @@ def gen_md_table(df,ncols=5,write=True):
             try:
                 im_url=im_urls[(i*ncols)+j]
                 ad_url=ad_urls[(i*ncols)+j]
-                ad_date=ad_dates[(i*ncols)+j]
+                ad_date=dt.strftime(pd.to_datetime(ad_dates[(i*ncols)+j]).date(),"%d.%m.%Y")
                 ad_post=ad_postz[(i*ncols)+j]
                 ad_title=ad_titles[(i*ncols)+j].translate(spcial_char_map)
                 rowdata+=f"<img src='{im_url}' alt='{ad_title}' height='100px' width='150px'>[{ad_date} {ad_post}]({ad_url}) |"
@@ -159,7 +158,7 @@ if __name__ == "__main__":
         tutti_df=pd.read_json('tutti_results.jl')
         new_df=pd.read_json('tutti_results_temp.json')
         tutti_df.merge(new_df,on='url')
-        tutti_df.reset_index(inplace=True).drop_duplicates(inplace=True)
+        tutti_df.reset_index().drop_duplicates(subset='url',inplace=True)
         tutti_df.to_json('tutti_results.jl')
         
     tutti_df=pd.read_json('tutti_results.jl')
@@ -173,11 +172,11 @@ if __name__ == "__main__":
         bdf=pd.read_json('tutti_scored.json')
         new_ims=[i for i in mdf.first_image.values.tolist() if i not in bdf.first_image.values.tolist()]
         print(f"checking {len(new_ims)} images to see if they contain bicycles...")
-        bike_dict=pd.DataFrame(web_detect_velo(new_ims))) #only run on ones that don't have score yet...
-        bike_df = mdf.merge(bike_dict,left_on='first_image',right_on='im_url').sort_values(by='date_posted')
-        bike_df.drop_duplicates(subset='url',inplace=True)
+        bike_dict=pd.DataFrame(web_detect_velo(new_ims)) #only run on ones that don't have score yet...
+        bike_df = mdf.merge(bike_dict,left_on='first_image',right_on='im_url')
+        bike_df['date_posted']=pd.to_datetime(bike_df['date_posted'],dayfirst=True)
+        bike_df.sort_values(by='date_posted',ascending=False).drop_duplicates(subset='url',inplace=True)
         bike_df.to_json('tutti_scored.json')
-        bike_df.dropna(subset=['entity','score'],inplace=True)
         print(f"{len(bike_df)}/{len(mdf)} images contain bicycles")
         gen_md_table(bike_df)
     elif args.w:

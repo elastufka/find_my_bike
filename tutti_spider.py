@@ -7,12 +7,13 @@ class TuttiSpider(scrapy.Spider):
     name = "tutti"
     
     def __init__(self, start_date=dt(2022,2,22,0,0,0)):
-        super(MySpider, self).__init__(*args, **kwargs)
+        super(TuttiSpider, self).__init__()
         self.start_date=start_date
-
+        self.start_urls=['https://www.tutti.ch/de/li/ganze-schweiz/sport-outdoor?q=velo']
+        #print(self.start_date,self.start_urls)
+        
     def start_requests(self):
-        urls = ['https://www.tutti.ch/de/li/ganze-schweiz/sport-outdoor?q=velo',]
-        for url in urls:
+        for url in self.start_urls:
             yield scrapy.Request(url=url, callback=self.parse)
 
     def parse(self, response):
@@ -22,7 +23,7 @@ class TuttiSpider(scrapy.Spider):
             pagen=int(pagen[:-1])
         except ValueError:
             pagen=1
-        print("PAGEN",pagen,response.url)
+        #print("PAGEN",pagen,response.url)
             
         #date_stolen=dt(2022,2,22,0,0,0) #would be nice to pass this as an arg or kwarg actually
         for ad in response.css('div[data-automation="ad"]'):
@@ -30,7 +31,7 @@ class TuttiSpider(scrapy.Spider):
             
             ad_url=ad.xpath('a').attrib['href']
             
-            if ad_posted < start_date:
+            if ad_posted < self.start_date:
                 print('STOPPED AT',ad_posted)
                 break
             
