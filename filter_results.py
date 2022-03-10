@@ -136,17 +136,17 @@ if __name__ == "__main__":
     
     if args.cv:
         bdf=pd.read_json('tutti_scored.json')
-        bdf['date_posted']=pd.to_datetime(bdf['date_posted'],dayfirst=True,unit='ms')
+        bdf['date_posted']=pd.to_datetime(bdf['date_posted'],dayfirst=True,unit='ms') #cron job failed on 9.3, make sure to run scrape with that start date eventually
         new_ims=[i for i in mdf.first_image.values.tolist() if i not in bdf.first_image.values.tolist()]
         print(f"checking {len(new_ims)} images to see if they contain bicycles...")
         bike_dict=pd.DataFrame(web_detect_velo(new_ims)) #only run on ones that don't have score yet...
-        bike_dict.to_json('bike_scores_temp.json')
+        print(f"{len(bike_dict)}/{len(new_ims)} images contain bicycles")
+        bike_dict.to_json('bike_scores_temp.json') #for testing
         mdf['date_posted']=pd.to_datetime(mdf['date_posted'],dayfirst=True)
         bike_df = mdf.merge(bike_dict,left_on='first_image',right_on='im_url') #newly detected bikes
-        bdf.append(bike_df)
+        bdf=bdf.append(bike_df)
         mddf=bdf.sort_values(by='date_posted',ascending=False).drop_duplicates(subset='url')
         mddf.to_json('tutti_scored.json')
-        print(f"{len(mddf)}/{len(mdf)} images contain bicycles")
         gen_md_table(mddf)
     elif args.w:
         gen_md_table(mdf)
