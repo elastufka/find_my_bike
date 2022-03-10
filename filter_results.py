@@ -98,7 +98,7 @@ def gen_md_table(df,ncols=5,write=True):
                 ad_url=ad_urls[(i*ncols)+j]
                 ad_date=dt.strftime(pd.to_datetime(ad_dates[(i*ncols)+j]).date(),"%d.%m.%Y")
                 ad_post=ad_postz[(i*ncols)+j]
-                ad_title=ad_titles[(i*ncols)+j].translate(spcial_char_map)
+                ad_title=ad_titles[(i*ncols)+j].lower().translate(spcial_char_map)
                 rowdata+=f"<img src='{im_url}' alt='{ad_title}' height='100px' width='150px'>[{ad_date} {ad_post}]({ad_url}) |"
             except IndexError:
                 rowdata+=" |"
