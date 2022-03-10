@@ -7,13 +7,13 @@ from tutti_spider import TuttiSpider
 import argparse
 import os
 import io
-from google.cloud import vision
+from google.cloud import vision #probably overkill to use Cloud Vision just to identify bikes... any ImageNet should be able to do that, and faster... but I havent' been billed for this yet
 from google.oauth2 import service_account
 
-#from twisted.internet import reactor
 
+## TODO: NLP this! need to account for language and POS! SpaCy is probably overkill, nltk should be enough for the basics
 exclude_types=['kinder','kind','mädchen','kindervelo','kinderfahrrad','damenvelo','citybike','mountain','mountainbike','mtb','fatbike','militär','bmx','e-bike','ebike','cruiser','fixie','einrad']
-exclude_brands=['cube','giant','cannondale','totem','scott','wheeler','canyon','california','merida','bianchi','clio','bmc','gary fisher','crosswave','schwinn','puky','stoke']
+exclude_brands=['cube','giant','cannondale','totem','scott','wheeler','canyon','california','merida','bianchi','clio','bmc','gary fisher','crosswave','schwinn','puky','stoke'] #technically it's a Trek but only a really good bike thief would be able to find that out
 exclude_colors=['weiss','schwarz','rot','gelb','grau'] #should use nltk eventually to make langauge-independent
 exclude_other=['helm','veloanhänger','anhänger','20 zoll','26 zoll','28 zoll','neu','laufrad','hometrainer','indoor','suche','velonummer','velosschloss','stützräder']
 
@@ -27,7 +27,6 @@ def filter_results(df,exclude_types,exclude_brands=exclude_brands,exclude_colors
     if exclude_other:
         exclude.extend(exclude_other)
     
-    #print(exclude)
     badrows=[]
     for i,row in df.iterrows():
         for e in exclude:
@@ -37,27 +36,7 @@ def filter_results(df,exclude_types,exclude_brands=exclude_brands,exclude_colors
                 
     bad_df = df.index.isin(badrows)
     return df[~bad_df].drop_duplicates(subset=['url'])#,badrows
-    
-def filter_details(df,exclude_types,exclude_brands=exclude_brands,exclude_colors=exclude_colors,exclude_other=exclude_other):
-    '''basic filtering'''
-    exclude=exclude_types
-    if exclude_brands:
-        exclude.extend(exclude_brands)
-    if exclude_colors:
-        exclude.extend(exclude_colors)
-    if exclude_other:
-        exclude.extend(exclude_other)
-
-    badrows=[]
-    for i,row in df.iterrows():
-        for e in exclude:
-            if e in row.description.lower():
-                badrows.append(i)
-                break
-                
-    bad_df = df.index.isin(badrows)
-    return df[~bad_df]
-    
+        
 def annotate(image_url):
     """Returns web annotations given the path to an image."""
     # [START vision_web_detection_tutorial_annotate]
@@ -96,15 +75,6 @@ def web_detect_velo(image_urls):
     bike_dict={"im_url":urls,"entity":entities,"score":scores}
     return bike_dict
                     
-#def merge_results(filtered_df,original_df):
-#    mdf=filtered_df.merge(original_df,left_on='key',right_on='url',how='inner')
-#    mdf.rename(columns={'url_x':'full_url'},inplace=True)
-#    mdf.drop(columns='url_y',inplace=True)
-#    mdf=mdf.drop_duplicates(subset='full_url')
-#    return mdf
-    
-#generate md table
-
 def gen_md_table(df,ncols=5,write=True):
     spcial_char_map = {ord('ä'):'ae', ord('ü'):'ue', ord('ö'):'oe', ord('ß'):'ss'}
     im_urls=df.first_image.values.tolist()
@@ -157,27 +127,26 @@ if __name__ == "__main__":
         process.start()
         tutti_df=pd.read_json('tutti_results.jl')
         new_df=pd.read_json('tutti_results_temp.json')
-        tutti_df.merge(new_df,on='url')
-        tutti_df.reset_index().drop_duplicates(subset='url',inplace=True)
-        tutti_df.to_json('tutti_results.jl')
+        tdf=tutti_df.append(new_df).reset_index(drop=True).drop_duplicates(subset='url')
+        tdf.to_json('tutti_results.jl') #merge and write new scrape results
         
     tutti_df=pd.read_json('tutti_results.jl')
-    original_df=filter_results(tutti_df,exclude_types,exclude_brands=exclude_brands,exclude_colors=exclude_colors,exclude_other=exclude_other).drop_duplicates(subset='url')
-    original_df.to_json('tutti_filtered.json')
-    #filtered_df=filter_details(tutti_details,exclude_types,exclude_brands=exclude_brands,exclude_colors=exclude_colors,exclude_other=exclude_other)
-    
-    mdf=original_df#merge_results(filtered_df,original_df)
+    mdf=filter_results(tutti_df,exclude_types,exclude_brands=exclude_brands,exclude_colors=exclude_colors,exclude_other=exclude_other).drop_duplicates(subset='url')
+    mdf.to_json('tutti_filtered.json')
     
     if args.cv:
         bdf=pd.read_json('tutti_scored.json')
+        bdf['date_posted']=pd.to_datetime(bdf['date_posted'],dayfirst=True,unit='ms')
         new_ims=[i for i in mdf.first_image.values.tolist() if i not in bdf.first_image.values.tolist()]
         print(f"checking {len(new_ims)} images to see if they contain bicycles...")
         bike_dict=pd.DataFrame(web_detect_velo(new_ims)) #only run on ones that don't have score yet...
-        bike_df = mdf.merge(bike_dict,left_on='first_image',right_on='im_url')
-        bike_df['date_posted']=pd.to_datetime(bike_df['date_posted'],dayfirst=True)
-        bike_df.sort_values(by='date_posted',ascending=False).drop_duplicates(subset='url',inplace=True)
-        bike_df.to_json('tutti_scored.json')
-        print(f"{len(bike_df)}/{len(mdf)} images contain bicycles")
-        gen_md_table(bike_df)
+        bike_dict.to_json('bike_scores_temp.json')
+        mdf['date_posted']=pd.to_datetime(mdf['date_posted'],dayfirst=True)
+        bike_df = mdf.merge(bike_dict,left_on='first_image',right_on='im_url') #newly detected bikes
+        bdf.append(bike_df)
+        mddf=bdf.sort_values(by='date_posted',ascending=False).drop_duplicates(subset='url')
+        mddf.to_json('tutti_scored.json')
+        print(f"{len(mddf)}/{len(mdf)} images contain bicycles")
+        gen_md_table(mddf)
     elif args.w:
         gen_md_table(mdf)

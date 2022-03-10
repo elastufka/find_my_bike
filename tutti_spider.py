@@ -1,7 +1,7 @@
 from datetime import datetime as dt
 from datetime import timedelta as td
 import scrapy
-import collections
+#import collections
 
 class TuttiSpider(scrapy.Spider):
     name = "tutti"
@@ -10,7 +10,6 @@ class TuttiSpider(scrapy.Spider):
         super(TuttiSpider, self).__init__()
         self.start_date=start_date
         self.start_urls=['https://www.tutti.ch/de/li/ganze-schweiz/sport-outdoor?q=velo']
-        #print(self.start_date,self.start_urls)
         
     def start_requests(self):
         for url in self.start_urls:
@@ -23,7 +22,6 @@ class TuttiSpider(scrapy.Spider):
             pagen=int(pagen[:-1])
         except ValueError:
             pagen=1
-        #print("PAGEN",pagen,response.url)
             
         #date_stolen=dt(2022,2,22,0,0,0) #would be nice to pass this as an arg or kwarg actually
         for ad in response.css('div[data-automation="ad"]'):
@@ -42,7 +40,6 @@ class TuttiSpider(scrapy.Spider):
         if last_page >1:
             pagen+=1
             next_page_url=f"https://www.tutti.ch/de/li/ganze-schweiz/sport-outdoor?o={pagen}&q=velo"
-            #print('NEXT_URL',next_page_url)
             yield response.follow(next_page_url, self.parse)
             
     def parse_full(self, response):
