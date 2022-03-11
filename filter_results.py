@@ -145,7 +145,7 @@ if __name__ == "__main__":
         mdf['date_posted']=pd.to_datetime(mdf['date_posted'],dayfirst=True)
         bike_df = mdf.merge(bike_dict,left_on='first_image',right_on='im_url') #newly detected bikes
         bdf=bdf.append(bike_df)
-        mddf=bdf.sort_values(by='date_posted',ascending=False).drop_duplicates(subset='url')
+        mddf=bdf.sort_values(by='date_posted',ascending=False).drop_duplicates(subset='url').reset_index(drop=True)
         mddf.to_json('tutti_scored.json')
         gen_md_table(mddf)
     elif args.w:
