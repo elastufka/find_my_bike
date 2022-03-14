@@ -6,7 +6,7 @@ import scrapy
 class TuttiSpider(scrapy.Spider):
     name = "tutti"
     
-    def __init__(self, start_date=dt(2022,2,22,0,0,0)):
+    def __init__(self, start_date=dt(2022,2,22,0,0,0)): 
         super(TuttiSpider, self).__init__()
         self.start_date=start_date
         self.start_urls=['https://www.tutti.ch/de/li/ganze-schweiz/sport-outdoor?q=velo']
@@ -56,14 +56,19 @@ class TuttiSpider(scrapy.Spider):
         ad_posted=self.datetime_posted(response.css("div[class='_9mKtt pRm6L']").xpath('span/text()').extract_first())
         region=response.css("div[class='M2A0K']").xpath('span/text()').extract_first().split(',')
         first_image= response.css('div[class="puEEg"]').xpath('div')[0].xpath('div').xpath('noscript').xpath('img').attrib['src']
-    
+        
+        price_elem=response.css('dd[class="LGWk6"]')[1].get()
+        pmap={ord('-'):'',ord('.'):''}
+        
         attributes={"url":response.url,
             "title":title,
             "date_posted":dt.strftime(ad_posted.date(),'%d.%m.%Y'),
             "first_image":first_image,
             "region":region[0],
             "postzahl":int(region[1].strip()),
-            "description":dtext}
+            "description":dtext,
+            "price":int(price_elem[price_elem.find('>')+1:price_elem.rfind('<')].translate(pmap)),
+    }
         yield attributes
             
     def datetime_posted(self,time_str):
